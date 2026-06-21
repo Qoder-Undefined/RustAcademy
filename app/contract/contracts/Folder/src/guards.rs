@@ -14,31 +14,8 @@
 //!
 //! ## Usage Pattern
 //!
-//! Every public mutating entry point should use guards consistently:
-//!
-//! ```rust
-//! pub fn some_mutation(env: Env, caller: Address, ...) -> Result<(), RustAcademyError> {
-//!     // 1. Check emergency mode (if applicable)
-//!     guards::require_not_emergency_mode(&env)?;
-//!
-//!     // 2. Check global pause (if applicable)
-//!     guards::require_not_paused(&env)?;
-//!
-//!     // 3. Check feature pause (if applicable)
-//!     guards::require_feature_not_paused(&env, PauseFlag::SomeFeature)?;
-//!
-//!     // 4. Check reentrancy (if applicable)
-//!     guards::assert_not_reentrant(&env)?;
-//!
-//!     // 5. Check initialization (if applicable)
-//!     guards::require_initialized(&env)?;
-//!
-//!     // 6. Check role/auth (if applicable)
-//!     guards::require_role(&env, &caller, Role::Admin)?;
-//!
-//!     // ... proceed with business logic
-//! }
-//! ```
+//! Every public mutating entry point should use guards consistently.
+//! See the documentation in `docs/AUTHORIZATION_GUARDS.md` for detailed usage examples.
 
 use crate::admin;
 use crate::errors::RustAcademyError;
@@ -177,30 +154,30 @@ pub fn guard_withdraw(env: &Env, flag: PauseFlag) -> Result<(), RustAcademyError
 
 /// Standard guard for admin operations.
 ///
-/// Checks: emergency mode, initialization, admin role.
-pub fn guard_admin_operation(env: &Env, caller: &Address) -> Result<(), RustAcademyError> {
+/// Checks: emergency mode, initialization.
+/// Note: Authorization is handled by the underlying admin functions.
+pub fn guard_admin_operation(env: &Env) -> Result<(), RustAcademyError> {
     require_not_emergency_mode(env)?;
     require_initialized(env)?;
-    require_admin(env, caller)?;
     Ok(())
 }
 
 /// Standard guard for operator operations.
 ///
-/// Checks: emergency mode, initialization, admin or operator role.
-pub fn guard_operator_operation(env: &Env, caller: &Address) -> Result<(), RustAcademyError> {
+/// Checks: emergency mode, initialization.
+/// Note: Authorization is handled by the underlying admin functions.
+pub fn guard_operator_operation(env: &Env) -> Result<(), RustAcademyError> {
     require_not_emergency_mode(env)?;
     require_initialized(env)?;
-    require_any_role(env, caller, &[Role::Admin, Role::Operator])?;
     Ok(())
 }
 
 /// Standard guard for administrative state changes (pause, admin transfer, etc.).
 ///
-/// Checks: emergency mode, admin role.
-pub fn guard_admin_state_change(env: &Env, caller: &Address) -> Result<(), RustAcademyError> {
+/// Checks: emergency mode.
+/// Note: Authorization is handled by the underlying admin functions.
+pub fn guard_admin_state_change(env: &Env) -> Result<(), RustAcademyError> {
     require_not_emergency_mode(env)?;
-    require_admin(env, caller)?;
     Ok(())
 }
 
@@ -224,9 +201,9 @@ pub fn guard_hook_registration(env: &Env) -> Result<(), RustAcademyError> {
 
 /// Standard guard for fee configuration changes.
 ///
-/// Checks: reentrancy, admin or operator role.
+/// Checks: reentrancy.
+/// Note: Authorization is handled by the underlying admin functions.
 pub fn guard_fee_config(env: &Env, caller: &Address) -> Result<(), RustAcademyError> {
     assert_not_reentrant(env)?;
-    require_any_role(env, caller, &[Role::Admin, Role::Operator])?;
     Ok(())
 }

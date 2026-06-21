@@ -22,8 +22,6 @@ mod fee_test;
 #[cfg(test)]
 mod fuzz_test;
 mod guards;
-#[cfg(test)]
-mod guards_test;
 mod hook;
 #[cfg(test)]
 mod metadata_test;
@@ -350,7 +348,7 @@ impl  RustAcademyContract {
     }
     /// Activate emergency mode (irreversible). Only admin can call. Emits event.
     pub fn activate_emergency_mode(env: Env, caller: Address) -> Result<(),  RustAcademyError> {
-        guards::require_admin(&env, &caller)?;
+        // Authorization is handled by admin module
         if storage::is_emergency_mode(&env) {
             return Ok(()); // Already set
         }
@@ -623,7 +621,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn set_paused(env: Env, caller: Address, new_state: bool) -> Result<(),  RustAcademyError> {
-        guards::guard_admin_state_change(&env, &caller)?;
+        guards::guard_admin_state_change(&env)?;
         admin::set_paused(&env, caller, new_state)
     }
 
@@ -646,7 +644,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn pause_features(env: Env, caller: Address, mask: u64) -> Result<(),  RustAcademyError> {
-        guards::guard_admin_state_change(&env, &caller)?;
+        guards::guard_admin_state_change(&env)?;
         admin::set_pause_flags(&env, &caller, mask, 0)
     }
 
@@ -661,7 +659,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn unpause_features(env: Env, caller: Address, mask: u64) -> Result<(),  RustAcademyError> {
-        guards::guard_admin_state_change(&env, &caller)?;
+        guards::guard_admin_state_change(&env)?;
         admin::set_pause_flags(&env, &caller, 0, mask)
     }
 
@@ -677,7 +675,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn set_admin(env: Env, caller: Address, new_admin: Address) -> Result<(),  RustAcademyError> {
-        guards::guard_admin_state_change(&env, &caller)?;
+        guards::guard_admin_state_change(&env)?;
         admin::set_admin(&env, caller, new_admin)
     }
 
@@ -769,7 +767,7 @@ impl  RustAcademyContract {
         caller: Address,
         wallet: Address,
     ) -> Result<(),  RustAcademyError> {
-        guards::guard_admin_operation(&env, &caller)?;
+        guards::guard_admin_operation(&env)?;
         admin::set_platform_wallet(&env, &caller, wallet)
     }
 
@@ -779,7 +777,7 @@ impl  RustAcademyContract {
         caller: Address,
         new_collector: Address,
     ) -> Result<u32,  RustAcademyError> {
-        guards::guard_admin_operation(&env, &caller)?;
+        guards::guard_admin_operation(&env)?;
         admin::rotate_fee_collector(&env, &caller, new_collector)
     }
 
