@@ -1,6 +1,7 @@
 import { SorobanErrorCode } from '../common/soroban-errors';
 
 export const TESTNET_CONTRACT_WRITES_FLAG = 'testnet.contract_writes';
+export const MAINNET_CONTRACT_WRITES_FLAG = 'mainnet.contract_writes';
 
 export const CONTRACT_WRITES_DISABLED_CODE =
   SorobanErrorCode.CONTRACT_WRITES_DISABLED;

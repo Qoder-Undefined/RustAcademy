@@ -21,6 +21,7 @@ import {
   PublishContractRegistryDto,
   RollbackContractRegistryDto,
 } from './dto/contract-registry.dto';
+import { ContractWritePolicyService, ContractWriteOperation } from '../feature-flags/contract-write-policy.service';
 
 @ApiTags('contracts')
 @ApiHeader({
@@ -32,7 +33,10 @@ import {
 @UseGuards(ApiKeyGuard)
 @Controller('contracts')
 export class ContractRegistryController {
-  constructor(private readonly contractRegistryService: ContractRegistryService) {}
+  constructor(
+    private readonly contractRegistryService: ContractRegistryService,
+    private readonly contractWritePolicyService: ContractWritePolicyService,
+  ) {}
 
   @Get('registry')
   @ApiOperation({
@@ -63,7 +67,23 @@ export class ContractRegistryController {
   @ApiOperation({
     summary: 'Publish deployment artifacts into the contract registry',
   })
-  publish(@Body() body: PublishContractRegistryDto) {
+  @ApiResponse({ status: 200, description: 'Registry published successfully' })
+  @ApiResponse({ status: 403, description: 'Blocked by contract write policy' })
+  async publish(@Body() body: PublishContractRegistryDto, @Req() req: Request) {
+    const apiKey = (req as any).apiKey;
+    const actorId = apiKey?.id || 'anonymous';
+    
+    await this.contractWritePolicyService.checkWritePolicy(
+      ContractWriteOperation.CONTRACT_PUBLISH,
+      actorId,
+      {
+        metadata: { 
+          contractNames: body.contracts.map(c => c.name),
+          deploymentId: body.deploymentId,
+        },
+      },
+    );
+    
     return this.contractRegistryService.publish(body, 'api');
   }
 
@@ -74,7 +94,20 @@ export class ContractRegistryController {
   @ApiOperation({
     summary: 'Rollback the active registry entry for a contract to a previous version',
   })
-  rollback(@Body() body: RollbackContractRegistryDto) {
+  @ApiResponse({ status: 200, description: 'Registry rolled back successfully' })
+  @ApiResponse({ status: 403, description: 'Blocked by contract write policy' })
+  async rollback(@Body() body: RollbackContractRegistryDto, @Req() req: Request) {
+    const apiKey = (req as any).apiKey;
+    const actorId = apiKey?.id || 'anonymous';
+    
+    await this.contractWritePolicyService.checkWritePolicy(
+      ContractWriteOperation.CONTRACT_ROLLBACK,
+      actorId,
+      {
+        metadata: { contractName: body.name, version: body.version },
+      },
+    );
+    
     return this.contractRegistryService.rollback(body, 'api');
   }
 }
