@@ -44,6 +44,7 @@ use soroban_sdk::{token, Address, Bytes, BytesN, Env};
 use crate::{
     errors:: RustAcademyError,
     events,
+    guards,
     storage::{get_stealth_escrow, put_stealth_escrow},
     types::{EscrowStatus, StealthDepositParams, StealthEscrowEntry},
 };
@@ -101,6 +102,8 @@ pub fn register_ephemeral_key(
     env: &Env,
     params: StealthDepositParams,
 ) -> Result<BytesN<32>,  RustAcademyError> {
+    guards::guard_deposit(env, crate::storage::PauseFlag::Deposit)?;
+
     let StealthDepositParams {
         sender,
         token,
@@ -200,6 +203,7 @@ pub fn stealth_withdraw(
     spend_pub: BytesN<32>,
     stealth_address: BytesN<32>,
 ) -> Result<bool,  RustAcademyError> {
+    guards::guard_withdraw(env, crate::storage::PauseFlag::Withdrawal)?;
     recipient.require_auth();
 
     let mut entry =

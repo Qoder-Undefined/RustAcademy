@@ -21,6 +21,9 @@ mod fee_router_test;
 mod fee_test;
 #[cfg(test)]
 mod fuzz_test;
+mod guards;
+#[cfg(test)]
+mod guards_test;
 mod hook;
 #[cfg(test)]
 mod metadata_test;
@@ -113,13 +116,7 @@ impl  RustAcademyContract {
         to: Address,
         salt: Bytes,
     ) -> Result<bool,  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if is_feature_paused(&env, PauseFlag::Withdrawal) {
-            return Err( RustAcademyError::OperationPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_withdraw(&env, PauseFlag::Withdrawal)?;
         escrow::withdraw(&env, amount, to, salt)
     }
 
@@ -171,7 +168,7 @@ impl  RustAcademyContract {
     /// * `ContractPaused` - Contract is currently paused
     /// * `PrivacyAlreadySet` - Privacy state is already at the requested value
     pub fn set_privacy(env: Env, owner: Address, enabled: bool) -> Result<(),  RustAcademyError> {
-        admin::require_initialized(&env)?;
+        guards::require_initialized(&env)?;
         privacy::set_privacy(&env, owner, enabled)
     }
 
@@ -214,16 +211,7 @@ impl  RustAcademyContract {
         timeout_secs: u64,
         arbiter: Option<Address>,
     ) -> Result<BytesN<32>,  RustAcademyError> {
-        if storage::is_emergency_mode(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if is_feature_paused(&env, PauseFlag::Deposit) {
-            return Err( RustAcademyError::OperationPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_deposit(&env, PauseFlag::Deposit)?;
         escrow::deposit(&env, token, amount, owner, salt, timeout_secs, arbiter)
     }
 
@@ -349,16 +337,7 @@ impl  RustAcademyContract {
         timeout_secs: u64,
         arbiter: Option<Address>,
     ) -> Result<(),  RustAcademyError> {
-        if storage::is_emergency_mode(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if is_feature_paused(&env, PauseFlag::DepositWithCommitment) {
-            return Err( RustAcademyError::OperationPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_deposit(&env, PauseFlag::DepositWithCommitment)?;
         escrow::deposit_with_commitment(
             &env,
             from,
@@ -371,11 +350,7 @@ impl  RustAcademyContract {
     }
     /// Activate emergency mode (irreversible). Only admin can call. Emits event.
     pub fn activate_emergency_mode(env: Env, caller: Address) -> Result<(),  RustAcademyError> {
-        // Only admin can activate
-        let admin = get_admin(&env).ok_or( RustAcademyError::Unauthorized)?;
-        if caller != admin {
-            return Err( RustAcademyError::Unauthorized);
-        }
+        guards::require_admin(&env, &caller)?;
         if storage::is_emergency_mode(&env) {
             return Ok(()); // Already set
         }
@@ -415,13 +390,7 @@ impl  RustAcademyContract {
         timeout_secs: u64,
         arbiter: Option<Address>,
     ) -> Result<BytesN<32>,  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if is_feature_paused(&env, PauseFlag::Deposit) {
-            return Err( RustAcademyError::OperationPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_deposit(&env, PauseFlag::Deposit)?;
         escrow::deposit_partial(
             &env,
             token,
@@ -458,13 +427,7 @@ impl  RustAcademyContract {
         payer: Address,
         payment_amount: i128,
     ) -> Result<(),  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if is_feature_paused(&env, PauseFlag::Deposit) {
-            return Err( RustAcademyError::OperationPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_deposit(&env, PauseFlag::Deposit)?;
         escrow::partial_payment(&env, commitment, payer, payment_amount)
     }
 
@@ -484,14 +447,7 @@ impl  RustAcademyContract {
     /// * `EscrowNotExpired` - Escrow has no expiry or has not yet expired
     /// * `InvalidOwner` - Caller is not the original owner
     pub fn refund(env: Env, commitment: BytesN<32>, caller: Address) -> Result<(),  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        if is_feature_paused(&env, PauseFlag::Refund) {
-            return Err( RustAcademyError::OperationPaused);
-        }
-
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_withdraw(&env, PauseFlag::Refund)?;
         escrow::refund(&env, commitment, caller)
     }
 
@@ -499,7 +455,7 @@ impl  RustAcademyContract {
     ///
     /// Only escrows in `Spent` or `Refunded` status can be removed.
     pub fn cleanup_escrow(env: Env, commitment: BytesN<32>) -> Result<(),  RustAcademyError> {
-        admin::require_initialized(&env)?;
+        guards::require_initialized(&env)?;
         escrow::cleanup_escrow(&env, commitment)
     }
 
@@ -507,7 +463,7 @@ impl  RustAcademyContract {
     ///
     /// Any user can call this to keep an escrow from being archived.
     pub fn extend_escrow_ttl(env: Env, commitment: BytesN<32>) -> Result<(),  RustAcademyError> {
-        admin::require_initialized(&env)?;
+        guards::require_initialized(&env)?;
         escrow::extend_escrow_ttl(&env, commitment)
     }
 
@@ -525,10 +481,7 @@ impl  RustAcademyContract {
     /// * `NoArbiter` - No arbiter assigned to the escrow
     /// * `InvalidDisputeState` - Escrow is not in `Pending` status
     pub fn dispute(env: Env, commitment: BytesN<32>) -> Result<(),  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_dispute(&env)?;
         escrow::dispute(&env, commitment)
     }
 
@@ -555,10 +508,7 @@ impl  RustAcademyContract {
         resolve_for_owner: bool,
         recipient: Address,
     ) -> Result<(),  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_dispute(&env)?;
         escrow::resolve_dispute(&env, caller, commitment, resolve_for_owner, recipient)
     }
 
@@ -584,10 +534,7 @@ impl  RustAcademyContract {
         commitment: BytesN<32>,
         resolve_for_owner: bool,
     ) -> Result<(),  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_dispute(&env)?;
         escrow::vote_for_dispute(&env, caller, commitment, resolve_for_owner)
     }
 
@@ -610,10 +557,7 @@ impl  RustAcademyContract {
         commitment: BytesN<32>,
         recipient: Address,
     ) -> Result<(),  RustAcademyError> {
-        if admin::is_paused(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_dispute(&env)?;
         escrow::resolve_dispute_multi_sig(&env, commitment, recipient)
     }
 
@@ -679,9 +623,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn set_paused(env: Env, caller: Address, new_state: bool) -> Result<(),  RustAcademyError> {
-        if storage::is_emergency_mode(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
+        guards::guard_admin_state_change(&env, &caller)?;
         admin::set_paused(&env, caller, new_state)
     }
 
@@ -704,9 +646,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn pause_features(env: Env, caller: Address, mask: u64) -> Result<(),  RustAcademyError> {
-        if storage::is_emergency_mode(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
+        guards::guard_admin_state_change(&env, &caller)?;
         admin::set_pause_flags(&env, &caller, mask, 0)
     }
 
@@ -721,9 +661,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn unpause_features(env: Env, caller: Address, mask: u64) -> Result<(),  RustAcademyError> {
-        if storage::is_emergency_mode(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
+        guards::guard_admin_state_change(&env, &caller)?;
         admin::set_pause_flags(&env, &caller, 0, mask)
     }
 
@@ -739,9 +677,7 @@ impl  RustAcademyContract {
     /// # Errors
     /// * `Unauthorized` - Caller is not the admin, or admin not set
     pub fn set_admin(env: Env, caller: Address, new_admin: Address) -> Result<(),  RustAcademyError> {
-        if storage::is_emergency_mode(&env) {
-            return Err( RustAcademyError::ContractPaused);
-        }
+        guards::guard_admin_state_change(&env, &caller)?;
         admin::set_admin(&env, caller, new_admin)
     }
 
@@ -766,15 +702,13 @@ impl  RustAcademyContract {
 
     /// Register an external hook contract to receive escrow lifecycle callbacks.
     pub fn register_hook(env: Env, hook_contract: Address) -> Result<(),  RustAcademyError> {
-        admin::require_initialized(&env)?;
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_hook_registration(&env)?;
         hook::register_hook(&env, hook_contract)
     }
 
     /// Unregister a hook contract.
     pub fn unregister_hook(env: Env, hook_contract: Address) -> Result<(),  RustAcademyError> {
-        admin::require_initialized(&env)?;
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_hook_registration(&env)?;
         hook::unregister_hook(&env, hook_contract)
     }
 
@@ -789,7 +723,7 @@ impl  RustAcademyContract {
         caller: Address,
         config: FeeConfig,
     ) -> Result<(),  RustAcademyError> {
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_fee_config(&env, &caller)?;
         admin::set_fee_config(&env, &caller, config)
     }
 
@@ -800,7 +734,7 @@ impl  RustAcademyContract {
         token: Address,
         config: PerAssetFeeConfig,
     ) -> Result<(),  RustAcademyError> {
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_fee_config(&env, &caller)?;
         admin::set_per_asset_fee(&env, &caller, token, config)
     }
 
@@ -815,7 +749,7 @@ impl  RustAcademyContract {
         caller: Address,
         config: OracleFeeConfig,
     ) -> Result<(),  RustAcademyError> {
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_fee_config(&env, &caller)?;
         admin::set_oracle_fee_config(&env, &caller, config)
     }
 
@@ -835,7 +769,7 @@ impl  RustAcademyContract {
         caller: Address,
         wallet: Address,
     ) -> Result<(),  RustAcademyError> {
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_admin_operation(&env, &caller)?;
         admin::set_platform_wallet(&env, &caller, wallet)
     }
 
@@ -845,7 +779,7 @@ impl  RustAcademyContract {
         caller: Address,
         new_collector: Address,
     ) -> Result<u32,  RustAcademyError> {
-        hook::assert_not_reentrant(&env)?;
+        guards::guard_admin_operation(&env, &caller)?;
         admin::rotate_fee_collector(&env, &caller, new_collector)
     }
 
